@@ -1,0 +1,6 @@
+{
+  "name": "Delivery Label Master",
+  "description": "Professional tool for generating sample delivery labels from Excel data. Optimized for A4 printing (6 labels per page).",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

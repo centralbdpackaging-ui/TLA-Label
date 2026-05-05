@@ -134,22 +134,26 @@ export default function App() {
         const keys = Object.keys(firstRow).map(k => k.toLowerCase().trim());
         
         if (keys.includes('customer name') || keys.includes('contact person')) {
-          const newContacts: CustomerContact[] = jsonData.map(item => ({
-            customerName: String(item['Customer Name'] || item['customer name'] || '').trim(),
-            contactPerson: String(item['Contact Person'] || item['contact person'] || '').trim(),
-            phoneNumber: String(item['Phone Number'] || item['phone number'] || '').trim(),
-          }));
+          const newContacts: CustomerContact[] = jsonData
+            .filter(item => (item['Customer Name'] || item['customer name']))
+            .map(item => ({
+              customerName: String(item['Customer Name'] || item['customer name'] || '').trim().replace(/^"/, ''),
+              contactPerson: String(item['Contact Person'] || item['contact person'] || '').trim(),
+              phoneNumber: String(item['Phone Number'] || item['phone number'] || '').trim(),
+            }));
           updateContacts(newContacts);
         } else {
-          const newSamples: SampleData[] = jsonData.map((item, idx) => ({
-            id: crypto.randomUUID(),
-            siNo: item['SI NO'] || item['si no'] || idx + 1,
-            samplePo: String(item['Sample PO'] || item['sample po'] || '').trim(),
-            poNo: String(item['Po No'] || item['po no'] || '').trim(),
-            piNo: String(item['Pi No'] || item['pi no'] || '').trim(),
-            customer: String(item['Customer'] || item['customer'] || '').trim(),
-            sampleType: String(item['Sample Type'] || item['sample type'] || '').trim(),
-          }));
+          const newSamples: SampleData[] = jsonData
+            .filter(item => (item['Sample PO'] || item['sample po'] || item['Customer'] || item['customer']))
+            .map((item, idx) => ({
+              id: crypto.randomUUID(),
+              siNo: item['SI NO'] || item['si no'] || idx + 1,
+              samplePo: String(item['Sample PO'] || item['sample po'] || '').trim().replace(/^"/, ''),
+              poNo: String(item['Po No'] || item['po no'] || '').trim(),
+              piNo: String(item['Pi No'] || item['pi no'] || '').trim().replace(/^"/, ''),
+              customer: String(item['Customer'] || item['customer'] || '').trim().replace(/^"/, ''),
+              sampleType: String(item['Sample Type'] || item['sample type'] || '').trim(),
+            }));
           updateSamples(newSamples);
         }
       }
@@ -221,46 +225,88 @@ export default function App() {
     const pasteData = e.clipboardData.getData('text');
     if (!pasteData) return;
 
-    // Parse Tab-Separated Values (TSV) from Excel
-    const lines = pasteData.split(/\r?\n/).filter(line => line.trim() !== '');
-    if (lines.length === 0) return;
+    // Robust TSV Parser that respects quotes and newlines inside cells
+    const parseTsv = (text: string) => {
+      const rows: string[][] = [];
+      let currentRow: string[] = [];
+      let currentField = '';
+      let insideQuotes = false;
+      
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const nextChar = text[i + 1];
 
-    const headers = lines[0].split('\t').map(h => h.toLowerCase().trim());
-    const dataRows = lines.slice(1);
+        if (char === '"' && insideQuotes && nextChar === '"') {
+          currentField += '"';
+          i++;
+        } else if (char === '"') {
+          insideQuotes = !insideQuotes;
+          // Don't add the quote character itself to the field
+        } else if (char === '\t' && !insideQuotes) {
+          currentRow.push(currentField);
+          currentField = '';
+        } else if ((char === '\r' || char === '\n') && !insideQuotes) {
+          if (char === '\r' && nextChar === '\n') i++;
+          currentRow.push(currentField);
+          rows.push(currentRow);
+          currentRow = [];
+          currentField = '';
+        } else {
+          currentField += char;
+        }
+      }
+      if (currentField || currentRow.length > 0) {
+        currentRow.push(currentField);
+        rows.push(currentRow);
+      }
+      return rows;
+    };
 
-    if (headers.includes('customer name') || headers.includes('contact person')) {
+    const allRows = parseTsv(pasteData).filter(row => row.some(cell => cell.trim() !== ''));
+    if (allRows.length === 0) return;
+
+    const headers = allRows[0].map(h => h.toLowerCase().trim());
+    const dataRows = allRows.slice(1);
+
+    const hasContactHeaders = headers.includes('customer name') || headers.includes('contact person');
+    
+    if (hasContactHeaders) {
       // It's a Contact List
-      const newContacts: CustomerContact[] = dataRows.map(row => {
-        const cells = row.split('\t');
-        const getVal = (search: string) => {
-          const idx = headers.indexOf(search);
-          return idx !== -1 ? (cells[idx] || '').trim() : '';
-        };
-        return {
-          customerName: getVal('customer name') || cells[0] || '',
-          contactPerson: getVal('contact person') || cells[1] || '',
-          phoneNumber: getVal('phone number') || cells[2] || '',
-        };
-      });
+      const newContacts: CustomerContact[] = dataRows
+        .map(cells => {
+          const getVal = (search: string) => {
+            const idx = headers.indexOf(search);
+            return idx !== -1 ? (cells[idx] || '').trim() : '';
+          };
+          return {
+            customerName: getVal('customer name') || (cells[0] || '').trim(),
+            contactPerson: getVal('contact person') || (cells[1] || '').trim(),
+            phoneNumber: getVal('phone number') || (cells[2] || '').trim(),
+          };
+        })
+        .filter(c => c.customerName !== '');
+
       updateContacts([...contacts, ...newContacts]);
     } else {
       // It's a Sample List
-      const newSamples: SampleData[] = dataRows.map((row, idx) => {
-        const cells = row.split('\t');
-        const getVal = (search: string) => {
-          const idx = headers.indexOf(search);
-          return idx !== -1 ? (cells[idx] || '').trim() : '';
-        };
-        return {
-          id: crypto.randomUUID(),
-          siNo: getVal('si no') || idx + samples.length + 1,
-          samplePo: getVal('sample po') || cells[1] || '',
-          poNo: getVal('po no') || cells[2] || '',
-          piNo: getVal('pi no') || cells[3] || '',
-          customer: getVal('customer') || cells[4] || '',
-          sampleType: getVal('sample type') || cells[5] || '',
-        };
-      });
+      const newSamples: SampleData[] = dataRows
+        .map((cells, idx) => {
+          const getVal = (search: string) => {
+            const idx = headers.indexOf(search);
+            return idx !== -1 ? (cells[idx] || '').trim() : '';
+          };
+          return {
+            id: crypto.randomUUID(),
+            siNo: getVal('si no') || idx + samples.length + 1,
+            samplePo: getVal('sample po') || (cells[1] || '').trim(),
+            poNo: getVal('po no') || (cells[2] || '').trim(),
+            piNo: getVal('pi no') || (cells[3] || '').trim(),
+            customer: getVal('customer') || (cells[4] || '').trim(),
+            sampleType: getVal('sample type') || (cells[5] || '').trim(),
+          };
+        })
+        .filter(s => s.samplePo !== '' || s.customer !== '');
+
       updateSamples([...samples, ...newSamples]);
     }
   };

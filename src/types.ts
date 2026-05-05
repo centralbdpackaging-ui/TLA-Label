@@ -1,4 +1,5 @@
 export interface SampleData {
+  id: string;
   siNo: number | string;
   samplePo: string;
   poNo: string;

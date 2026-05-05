@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, ChangeEvent, useEffect } from 'react';
+import React, { useState, useRef, useMemo, ChangeEvent, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 // @ts-ignore
 import html2pdf from 'html2pdf.js';
@@ -9,7 +9,14 @@ import { SampleData, CustomerContact, LabelData } from './types';
 export default function App() {
   const [samples, setSamples] = useState<SampleData[]>(() => {
     const saved = localStorage.getItem('delivery-master-samples');
-    return saved ? JSON.parse(saved) : [];
+    if (!saved) return [];
+    const parsed = JSON.parse(saved) as SampleData[];
+    // Migration: ensure every sample has a unique ID
+    const migrated = parsed.map(s => ({
+      ...s,
+      id: s.id || crypto.randomUUID()
+    }));
+    return migrated;
   });
   const [contacts, setContacts] = useState<CustomerContact[]>(() => {
     const saved = localStorage.getItem('delivery-master-contacts');
@@ -57,14 +64,14 @@ export default function App() {
     const opt = {
       margin: 0,
       filename: `Delivery_Labels_${new Date().getTime()}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
+      image: { type: 'jpeg' as const, quality: 0.98 },
       html2canvas: { 
         scale: 2, 
         useCORS: true,
         letterRendering: true,
         logging: false
       },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
     };
 
     html2pdf().set(opt).from(element).save().then(() => {
@@ -135,6 +142,7 @@ export default function App() {
           updateContacts(newContacts);
         } else {
           const newSamples: SampleData[] = jsonData.map((item, idx) => ({
+            id: crypto.randomUUID(),
             siNo: item['SI NO'] || item['si no'] || idx + 1,
             samplePo: String(item['Sample PO'] || item['sample po'] || '').trim(),
             poNo: String(item['Po No'] || item['po no'] || '').trim(),
@@ -158,7 +166,7 @@ export default function App() {
   }, [samples, searchTerm]);
 
   const selectedLabels: LabelData[] = useMemo(() => {
-    const selectedSamples = samples.filter(s => selectedIds.has(`${s.samplePo}-${s.piNo}`));
+    const selectedSamples = samples.filter(s => selectedIds.has(s.id));
     const uniqueCustomers = new Map<string, LabelData>();
 
     selectedSamples.forEach(s => {
@@ -198,7 +206,7 @@ export default function App() {
     if (selectedIds.size === filteredSamples.length) {
       setSelectedIds(new Set());
     } else {
-      const allIds = filteredSamples.map(s => `${s.samplePo}-${s.piNo}`);
+      const allIds = filteredSamples.map(s => s.id);
       setSelectedIds(new Set(allIds));
     }
   };
@@ -244,6 +252,7 @@ export default function App() {
           return idx !== -1 ? (cells[idx] || '').trim() : '';
         };
         return {
+          id: crypto.randomUUID(),
           siNo: getVal('si no') || idx + samples.length + 1,
           samplePo: getVal('sample po') || cells[1] || '',
           poNo: getVal('po no') || cells[2] || '',
@@ -278,12 +287,41 @@ export default function App() {
       return;
     }
     const newSample: SampleData = {
+      id: crypto.randomUUID(),
       siNo: samples.length + 1,
       ...manualSample,
       poNo: manualSample.samplePo // defaulting for consistency
     };
     updateSamples([...samples, newSample]);
     setManualSample({ samplePo: '', piNo: '', customer: '', sampleType: '' });
+  };
+
+  const handleManualSamplePaste = (e: React.ClipboardEvent) => {
+    const data = e.clipboardData.getData('text');
+    if (data.includes('\t')) {
+      e.preventDefault();
+      const cells = data.split('\t').map(c => c.trim());
+      // Try to intelligently map cells
+      setManualSample({
+        samplePo: cells[0] || '',
+        piNo: cells[1] || '',
+        customer: cells[2] || '',
+        sampleType: cells[3] || ''
+      });
+    }
+  };
+
+  const handleManualContactPaste = (e: React.ClipboardEvent) => {
+    const data = e.clipboardData.getData('text');
+    if (data.includes('\t')) {
+      e.preventDefault();
+      const cells = data.split('\t').map(c => c.trim());
+      setManualContact({
+        customerName: cells[0] || '',
+        contactPerson: cells[1] || '',
+        phoneNumber: cells[2] || ''
+      });
+    }
   };
 
   const addManualContact = () => {
@@ -532,10 +570,10 @@ export default function App() {
                 <div className="relative">
                   <textarea 
                     onPaste={handlePaste}
-                    placeholder="Paste data from Excel here..."
+                    placeholder="Paste Samples or Contacts from Excel here..."
                     className="w-full h-32 p-4 text-xs font-mono bg-neutral-50 border border-neutral-100 rounded-xl focus:ring-2 focus:ring-neutral-900 focus:bg-white focus:outline-none transition-all resize-none"
                   ></textarea>
-                  <div className="absolute top-3 right-3 pointer-events-none opactiy-50">
+                  <div className="absolute top-3 right-3 pointer-events-none opacity-50">
                     <CheckCircle2 size={16} className="text-neutral-300" />
                   </div>
                 </div>
@@ -549,12 +587,13 @@ export default function App() {
                   <div className="space-y-4">
                     {/* Manual Sample */}
                     <div className="bg-neutral-50 p-3 rounded-xl border border-neutral-100 space-y-2">
-                      <div className="text-[9px] font-bold text-blue-600 uppercase">Single Sample</div>
+                      <div className="text-[9px] font-bold text-blue-600 uppercase">Single Sample / Smart Paste</div>
                       <div className="grid grid-cols-2 gap-2">
                         <input 
                           type="text" 
                           placeholder="Sample PO"
                           value={manualSample.samplePo}
+                          onPaste={handleManualSamplePaste}
                           onChange={e => setManualSample({...manualSample, samplePo: e.target.value})}
                           className="text-[11px] p-2 bg-white border border-neutral-200 rounded-lg focus:outline-none"
                         />
@@ -562,6 +601,7 @@ export default function App() {
                           type="text" 
                           placeholder="PI No"
                           value={manualSample.piNo}
+                          onPaste={handleManualSamplePaste}
                           onChange={e => setManualSample({...manualSample, piNo: e.target.value})}
                           className="text-[11px] p-2 bg-white border border-neutral-200 rounded-lg focus:outline-none"
                         />
@@ -569,20 +609,22 @@ export default function App() {
                           type="text" 
                           placeholder="Customer"
                           value={manualSample.customer}
+                          onPaste={handleManualSamplePaste}
                           onChange={e => setManualSample({...manualSample, customer: e.target.value})}
                           className="text-[11px] p-2 bg-white border border-neutral-200 rounded-lg focus:outline-none col-span-2"
                         />
                         <input 
                           type="text" 
-                          placeholder="Type (e.g. BARCODE)"
+                          placeholder="Type (e.g. PRICE BARCODE)"
                           value={manualSample.sampleType}
+                          onPaste={handleManualSamplePaste}
                           onChange={e => setManualSample({...manualSample, sampleType: e.target.value})}
                           className="text-[11px] p-2 bg-white border border-neutral-200 rounded-lg focus:outline-none col-span-2"
                         />
                       </div>
                       <button 
                         onClick={addManualSample}
-                        className="w-full bg-blue-600 text-white text-[10px] font-bold uppercase py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                        className="w-full bg-blue-600 text-white text-[10px] font-bold uppercase py-2 rounded-lg hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20"
                       >
                         Add to List
                       </button>
@@ -590,12 +632,13 @@ export default function App() {
 
                     {/* Manual Contact */}
                     <div className="bg-neutral-50 p-3 rounded-xl border border-neutral-100 space-y-2">
-                      <div className="text-[9px] font-bold text-green-600 uppercase">Single Contact</div>
+                      <div className="text-[9px] font-bold text-green-600 uppercase">Single Contact / Smart Paste</div>
                       <div className="grid grid-cols-1 gap-2">
                         <input 
                           type="text" 
                           placeholder="Customer Name"
                           value={manualContact.customerName}
+                          onPaste={handleManualContactPaste}
                           onChange={e => setManualContact({...manualContact, customerName: e.target.value})}
                           className="text-[11px] p-2 bg-white border border-neutral-200 rounded-lg focus:outline-none"
                         />
@@ -603,6 +646,7 @@ export default function App() {
                           type="text" 
                           placeholder="Contact Person (Attn)"
                           value={manualContact.contactPerson}
+                          onPaste={handleManualContactPaste}
                           onChange={e => setManualContact({...manualContact, contactPerson: e.target.value})}
                           className="text-[11px] p-2 bg-white border border-neutral-200 rounded-lg focus:outline-none"
                         />
@@ -610,13 +654,14 @@ export default function App() {
                           type="text" 
                           placeholder="Phone Number"
                           value={manualContact.phoneNumber}
+                          onPaste={handleManualContactPaste}
                           onChange={e => setManualContact({...manualContact, phoneNumber: e.target.value})}
                           className="text-[11px] p-2 bg-white border border-neutral-200 rounded-lg focus:outline-none"
                         />
                       </div>
                       <button 
                         onClick={addManualContact}
-                        className="w-full bg-green-600 text-white text-[10px] font-bold uppercase py-2 rounded-lg hover:bg-green-700 transition-colors"
+                        className="w-full bg-green-600 text-white text-[10px] font-bold uppercase py-2 rounded-lg hover:bg-green-700 transition-colors shadow-lg shadow-green-600/20"
                       >
                         Save Contact
                       </button>
@@ -752,14 +797,13 @@ export default function App() {
                       </tr>
                     ) : (
                       filteredSamples.map((sample) => {
-                        const id = `${sample.samplePo}-${sample.piNo}`;
-                        const isSelected = selectedIds.has(id);
+                        const isSelected = selectedIds.has(sample.id);
                         const hasContact = contacts.some(c => c.customerName.trim().toLowerCase() === sample.customer.trim().toLowerCase());
 
                         return (
                           <tr 
-                            key={id} 
-                            onClick={() => toggleSelect(id)}
+                            key={sample.id} 
+                            onClick={() => toggleSelect(sample.id)}
                             className={`hover:bg-neutral-50 cursor-pointer transition-colors ${isSelected ? 'bg-blue-50/30' : ''}`}
                           >
                             <td className="px-6 py-4">

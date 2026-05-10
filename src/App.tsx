@@ -534,7 +534,7 @@ export default function App() {
                   <div className="space-y-1">
                     <div className="text-[20px] font-black text-blue-950 leading-[0.95] uppercase break-words line-clamp-2 min-h-[1.95em] flex items-center">{label.customer}</div>
                     {label.address && (
-                      <div className="text-[9px] font-bold text-neutral-500 leading-tight border-l-2 border-neutral-300 pl-2 mt-1 line-clamp-1 italic">
+                      <div className="text-[10px] font-bold text-neutral-600 leading-tight border-l-2 border-neutral-300 pl-2 mt-1 italic break-words">
                         {label.address}
                       </div>
                     )}
@@ -917,11 +917,13 @@ export default function App() {
                           className="p-3 bg-neutral-50 rounded-xl border border-neutral-100 group-hover:border-neutral-200 group-hover:bg-neutral-100/50 transition-all cursor-pointer relative"
                         >
                           <div className="text-[11px] font-black text-neutral-900 leading-tight pr-6">{contact.customerName}</div>
-                          <div className="text-[9px] font-bold text-neutral-400 truncate">
-                            {contact.contactPerson} | <span className="opacity-50 font-medium italic">{contact.phoneNumber}</span>
+                          <div className="text-[9px] font-bold text-neutral-500">
+                            {contact.contactPerson} | <span className="opacity-70 font-medium italic">{contact.phoneNumber}</span>
                           </div>
                           {contact.address && (
-                            <div className="text-[8px] text-neutral-400/70 truncate pt-0.5 italic">{contact.address}</div>
+                            <div className="text-[9px] text-blue-600 font-medium pt-1 border-t border-neutral-100 mt-1 break-words">
+                              {contact.address}
+                            </div>
                           )}
                           <button 
                             onClick={(e) => { e.stopPropagation(); deleteContact(idx); }}
@@ -1067,15 +1069,13 @@ export default function App() {
                               <div className="text-xs text-neutral-400">{sample.piNo}</div>
                             </td>
                             <td className="px-4 py-4">
-                              <div className="font-medium text-neutral-900">{sample.customer}</div>
+                              <div className="font-bold text-neutral-900 leading-tight">{sample.customer}</div>
                               {hasContact ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded uppercase font-bold">
-                                  Matched
-                                </span>
+                                <div className="text-[10px] text-blue-600 font-medium mt-1 leading-tight max-w-[200px]">
+                                  {contacts.find(c => c.customerName.trim().toLowerCase() === sample.customer.trim().toLowerCase())?.address || 'Matched (No Address)'}
+                                </div>
                               ) : (
-                                <span className="inline-flex items-center gap-1 text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded uppercase font-bold">
-                                  No Contact Info
-                                </span>
+                                <div className="text-[10px] text-amber-600 font-bold uppercase tracking-wider mt-1 opacity-60">No contact info</div>
                               )}
                             </td>
                             <td className="px-4 py-4 text-right">

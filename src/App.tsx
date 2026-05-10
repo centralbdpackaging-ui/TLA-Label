@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo, ChangeEvent, useEffect } from 'react'
 import * as XLSX from 'xlsx';
 // @ts-ignore
 import html2pdf from 'html2pdf.js';
-import { Upload, Printer, Trash2, FileSpreadsheet, Search, CheckCircle2, Download, ChevronLeft } from 'lucide-react';
+import { Upload, Printer, Trash2, FileSpreadsheet, Search, CheckCircle2, Download, ChevronLeft, Edit3, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SampleData, CustomerContact, LabelData } from './types';
 
@@ -49,8 +49,17 @@ export default function App() {
   const [manualContact, setManualContact] = useState({
     customerName: '',
     contactPerson: '',
-    phoneNumber: ''
+    phoneNumber: '',
+    address: ''
   });
+
+  // Editing states
+  const [editingContactIndex, setEditingContactIndex] = useState<number | null>(null);
+  const [editContactBuffer, setEditContactBuffer] = useState<CustomerContact | null>(null);
+
+  // Sample editing states
+  const [editingSampleId, setEditingSampleId] = useState<string | null>(null);
+  const [editSampleBuffer, setEditSampleBuffer] = useState<SampleData | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const contactInputRef = useRef<HTMLInputElement>(null);
@@ -104,8 +113,8 @@ export default function App() {
       fileName = 'Sample_PO_Template.xlsx';
     } else {
       const data = [
-        ['Customer Name', 'Contact Person', 'Phone Number'],
-        ['AST KNITWEAR LTD.', 'Hannan | Executive,', 'm: +880 1329721679']
+        ['Customer Name', 'Contact Person', 'Phone Number', 'Address'],
+        ['AST KNITWEAR LTD.', 'Hannan | Executive,', 'm: +880 1329721679', 'Gazipur, Dhaka']
       ];
       ws = XLSX.utils.aoa_to_sheet(data);
       fileName = 'Contact_List_Template.xlsx';
@@ -140,6 +149,7 @@ export default function App() {
               customerName: String(item['Customer Name'] || item['customer name'] || '').trim().replace(/^"/, ''),
               contactPerson: String(item['Contact Person'] || item['contact person'] || '').trim(),
               phoneNumber: String(item['Phone Number'] || item['phone number'] || '').trim(),
+              address: String(item['Address'] || item['address'] || '').trim(),
             }));
           updateContacts(newContacts);
         } else {
@@ -182,7 +192,8 @@ export default function App() {
         uniqueCustomers.set(customerKey, {
           ...s,
           contactPerson: contact?.contactPerson || 'N/A',
-          phoneNumber: contact?.phoneNumber || 'N/A'
+          phoneNumber: contact?.phoneNumber || 'N/A',
+          address: contact?.address || ''
         });
       } else {
         const existing = uniqueCustomers.get(customerKey)!;
@@ -282,6 +293,7 @@ export default function App() {
             customerName: getVal('customer name') || (cells[0] || '').trim(),
             contactPerson: getVal('contact person') || (cells[1] || '').trim(),
             phoneNumber: getVal('phone number') || (cells[2] || '').trim(),
+            address: getVal('address') || (cells[3] || '').trim(),
           };
         })
         .filter(c => c.customerName !== '');
@@ -365,7 +377,8 @@ export default function App() {
       setManualContact({
         customerName: cells[0] || '',
         contactPerson: cells[1] || '',
-        phoneNumber: cells[2] || ''
+        phoneNumber: cells[2] || '',
+        address: cells[3] || ''
       });
     }
   };
@@ -376,7 +389,58 @@ export default function App() {
       return;
     }
     updateContacts([...contacts, manualContact]);
-    setManualContact({ customerName: '', contactPerson: '', phoneNumber: '' });
+    setManualContact({ customerName: '', contactPerson: '', phoneNumber: '', address: '' });
+  };
+
+  const startEditingContact = (index: number) => {
+    setEditingContactIndex(index);
+    setEditContactBuffer({ ...contacts[index] });
+  };
+
+  const saveEditedContact = () => {
+    if (!editContactBuffer || editingContactIndex === null) return;
+    const newContacts = [...contacts];
+    newContacts[editingContactIndex] = editContactBuffer;
+    updateContacts(newContacts);
+    setEditingContactIndex(null);
+    setEditContactBuffer(null);
+  };
+
+  const cancelEditingContact = () => {
+    setEditingContactIndex(null);
+    setEditContactBuffer(null);
+  };
+
+  const deleteContact = (index: number) => {
+    if (confirm('Are you sure you want to delete this contact?')) {
+      const newContacts = contacts.filter((_, i) => i !== index);
+      updateContacts(newContacts);
+    }
+  };
+
+  const startEditingSample = (sample: SampleData) => {
+    setEditingSampleId(sample.id);
+    setEditSampleBuffer({ ...sample });
+  };
+
+  const saveEditedSample = () => {
+    if (!editSampleBuffer || !editingSampleId) return;
+    const newSamples = samples.map(s => s.id === editingSampleId ? editSampleBuffer : s);
+    updateSamples(newSamples);
+    setEditingSampleId(null);
+    setEditSampleBuffer(null);
+  };
+
+  const cancelEditingSample = () => {
+    setEditingSampleId(null);
+    setEditSampleBuffer(null);
+  };
+
+  const deleteSample = (id: string) => {
+    if (confirm('Are you sure you want to delete this sample?')) {
+      const newSamples = samples.filter(s => s.id !== id);
+      updateSamples(newSamples);
+    }
   };
 
   if (isPrinting) {
@@ -469,6 +533,11 @@ export default function App() {
                   <div className="text-[7px] font-black text-neutral-400 uppercase tracking-[0.2em] mb-1">Deliver To</div>
                   <div className="space-y-1">
                     <div className="text-[20px] font-black text-blue-950 leading-[0.95] uppercase break-words line-clamp-2 min-h-[1.95em] flex items-center">{label.customer}</div>
+                    {label.address && (
+                      <div className="text-[9px] font-bold text-neutral-500 leading-tight border-l-2 border-neutral-300 pl-2 mt-1 line-clamp-1 italic">
+                        {label.address}
+                      </div>
+                    )}
                     <div className="flex items-center justify-between pt-1">
                       <div className="text-[12px] font-black flex items-baseline gap-1 text-neutral-900">
                         <span className="text-neutral-400 text-[8px] font-bold uppercase tracking-tighter">Attn:</span> {label.contactPerson}
@@ -704,6 +773,14 @@ export default function App() {
                           onChange={e => setManualContact({...manualContact, phoneNumber: e.target.value})}
                           className="text-[11px] p-2 bg-white border border-neutral-200 rounded-lg focus:outline-none"
                         />
+                        <input 
+                          type="text" 
+                          placeholder="Address (Optional)"
+                          value={manualContact.address}
+                          onPaste={handleManualContactPaste}
+                          onChange={e => setManualContact({...manualContact, address: e.target.value})}
+                          className="text-[11px] p-2 bg-white border border-neutral-200 rounded-lg focus:outline-none"
+                        />
                       </div>
                       <button 
                         onClick={addManualContact}
@@ -788,16 +865,74 @@ export default function App() {
             </div>
 
             {contacts.length > 0 && (
-              <div className="bg-white p-6 rounded-2xl border border-neutral-200 shadow-sm">
+              <div className="bg-white p-6 rounded-2xl border border-neutral-200 shadow-sm flex flex-col max-h-[500px]">
                 <h2 className="text-sm font-bold uppercase text-neutral-400 mb-4 tracking-tighter">Saved Customers ({contacts.length})</h2>
-                <div className="max-h-60 overflow-y-auto space-y-2 pr-2 scrollbar-thin">
-                  {contacts.slice(0, 10).map((c, i) => (
-                    <div key={i} className="text-[11px] p-2 bg-neutral-50 rounded-lg border border-neutral-100">
-                      <div className="font-bold text-neutral-800 line-clamp-1">{c.customerName}</div>
-                      <div className="text-neutral-500">{c.contactPerson}</div>
+                <div className="overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                  {contacts.map((contact, idx) => (
+                    <div key={idx} className="group relative">
+                      {editingContactIndex === idx ? (
+                        <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100 space-y-2">
+                          <input 
+                            value={editContactBuffer?.customerName || ''} 
+                            onChange={e => setEditContactBuffer(prev => prev ? {...prev, customerName: e.target.value} : null)}
+                            className="w-full text-[11px] font-bold p-2 bg-white border border-blue-200 rounded-lg outline-none"
+                            placeholder="Customer Name"
+                          />
+                          <input 
+                            value={editContactBuffer?.contactPerson || ''} 
+                            onChange={e => setEditContactBuffer(prev => prev ? {...prev, contactPerson: e.target.value} : null)}
+                            className="w-full text-[10px] p-2 bg-white border border-blue-200 rounded-lg outline-none"
+                            placeholder="Contact Person"
+                          />
+                          <input 
+                            value={editContactBuffer?.phoneNumber || ''} 
+                            onChange={e => setEditContactBuffer(prev => prev ? {...prev, phoneNumber: e.target.value} : null)}
+                            className="w-full text-[10px] p-2 bg-white border border-blue-200 rounded-lg outline-none"
+                            placeholder="Phone Number"
+                          />
+                          <input 
+                            value={editContactBuffer?.address || ''} 
+                            onChange={e => setEditContactBuffer(prev => prev ? {...prev, address: e.target.value} : null)}
+                            className="w-full text-[10px] p-2 bg-white border border-blue-200 rounded-lg outline-none"
+                            placeholder="Address"
+                          />
+                          <div className="flex gap-2 pt-1">
+                            <button 
+                              onClick={saveEditedContact}
+                              className="flex-1 bg-blue-600 text-white text-[9px] font-bold uppercase py-1.5 rounded-lg hover:bg-blue-700 transition-colors"
+                            >
+                              Save
+                            </button>
+                            <button 
+                              onClick={cancelEditingContact}
+                              className="bg-neutral-200 text-neutral-600 text-[9px] font-bold uppercase px-3 py-1.5 rounded-lg hover:bg-neutral-300 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div 
+                          onClick={() => startEditingContact(idx)}
+                          className="p-3 bg-neutral-50 rounded-xl border border-neutral-100 group-hover:border-neutral-200 group-hover:bg-neutral-100/50 transition-all cursor-pointer relative"
+                        >
+                          <div className="text-[11px] font-black text-neutral-900 leading-tight pr-6">{contact.customerName}</div>
+                          <div className="text-[9px] font-bold text-neutral-400 truncate">
+                            {contact.contactPerson} | <span className="opacity-50 font-medium italic">{contact.phoneNumber}</span>
+                          </div>
+                          {contact.address && (
+                            <div className="text-[8px] text-neutral-400/70 truncate pt-0.5 italic">{contact.address}</div>
+                          )}
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); deleteContact(idx); }}
+                            className="absolute right-2 top-2 w-6 h-6 items-center justify-center bg-red-50 text-red-500 rounded-full opacity-0 group-hover:opacity-100 flex transition-all hover:bg-red-500 hover:text-white"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
-                  {contacts.length > 10 && <div className="text-[10px] text-center text-neutral-400 pt-2 italic">And {contacts.length - 10} more...</div>}
                 </div>
               </div>
             )}
@@ -844,21 +979,88 @@ export default function App() {
                     ) : (
                       filteredSamples.map((sample) => {
                         const isSelected = selectedIds.has(sample.id);
+                        const isEditing = editingSampleId === sample.id;
                         const hasContact = contacts.some(c => c.customerName.trim().toLowerCase() === sample.customer.trim().toLowerCase());
+
+                        if (isEditing) {
+                          return (
+                            <tr key={sample.id} className="bg-blue-50/50">
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-2">
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); saveEditedSample(); }}
+                                    className="p-1 bg-green-500 text-white rounded hover:bg-green-600 shadow-sm"
+                                  >
+                                    <CheckCircle2 size={14} />
+                                  </button>
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); cancelEditingSample(); }}
+                                    className="p-1 bg-neutral-400 text-white rounded hover:bg-neutral-500 shadow-sm"
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                </div>
+                              </td>
+                              <td className="px-4 py-4 space-y-1">
+                                <input 
+                                  value={editSampleBuffer?.samplePo || ''} 
+                                  onChange={e => setEditSampleBuffer(prev => prev ? {...prev, samplePo: e.target.value} : null)}
+                                  onClick={e => e.stopPropagation()}
+                                  className="w-full text-xs font-mono p-1 border border-blue-200 rounded outline-none bg-white"
+                                  placeholder="Sample PO"
+                                />
+                                <input 
+                                  value={editSampleBuffer?.piNo || ''} 
+                                  onChange={e => setEditSampleBuffer(prev => prev ? {...prev, piNo: e.target.value} : null)}
+                                  onClick={e => e.stopPropagation()}
+                                  className="w-full text-[10px] p-1 border border-blue-200 rounded outline-none bg-white"
+                                  placeholder="PI No"
+                                />
+                              </td>
+                              <td className="px-4 py-4">
+                                <input 
+                                  value={editSampleBuffer?.customer || ''} 
+                                  onChange={e => setEditSampleBuffer(prev => prev ? {...prev, customer: e.target.value} : null)}
+                                  onClick={e => e.stopPropagation()}
+                                  className="w-full text-xs p-1 border border-blue-200 rounded outline-none bg-white font-bold"
+                                  placeholder="Customer"
+                                />
+                              </td>
+                              <td className="px-4 py-4 text-right">
+                                <input 
+                                  value={editSampleBuffer?.sampleType || ''} 
+                                  onChange={e => setEditSampleBuffer(prev => prev ? {...prev, sampleType: e.target.value} : null)}
+                                  onClick={e => e.stopPropagation()}
+                                  className="w-24 text-[10px] p-1 border border-blue-200 rounded outline-none bg-white text-right"
+                                  placeholder="Type"
+                                />
+                              </td>
+                            </tr>
+                          );
+                        }
 
                         return (
                           <tr 
                             key={sample.id} 
                             onClick={() => toggleSelect(sample.id)}
-                            className={`hover:bg-neutral-50 cursor-pointer transition-colors ${isSelected ? 'bg-blue-50/30' : ''}`}
+                            className={`hover:bg-neutral-50 cursor-pointer transition-colors group ${isSelected ? 'bg-blue-50/20' : ''}`}
                           >
                             <td className="px-6 py-4">
-                              <input 
-                                type="checkbox" 
-                                checked={isSelected}
-                                readOnly
-                                className="w-4 h-4 accent-neutral-900"
-                              />
+                              <div className="flex items-center gap-3">
+                                <input 
+                                  type="checkbox" 
+                                  checked={isSelected}
+                                  readOnly
+                                  className="w-4 h-4 accent-neutral-900"
+                                />
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); startEditingSample(sample); }}
+                                  className="opacity-0 group-hover:opacity-100 p-1 text-neutral-400 hover:text-blue-600 transition-opacity"
+                                  title="Edit Sample"
+                                >
+                                  <Edit3 size={14} />
+                                </button>
+                              </div>
                             </td>
                             <td className="px-4 py-4">
                               <div className="font-mono text-sm font-semibold">{sample.samplePo}</div>
@@ -877,7 +1079,16 @@ export default function App() {
                               )}
                             </td>
                             <td className="px-4 py-4 text-right">
-                              <div className="text-xs text-neutral-500">{sample.sampleType}</div>
+                              <div className="flex items-center justify-end gap-2">
+                                <div className="text-xs text-neutral-500">{sample.sampleType}</div>
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); deleteSample(sample.id); }}
+                                  className="opacity-0 group-hover:opacity-100 p-1 text-neutral-400 hover:text-red-500 transition-opacity"
+                                  title="Delete Row"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );

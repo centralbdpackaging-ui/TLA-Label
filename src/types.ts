@@ -12,9 +12,11 @@ export interface CustomerContact {
   customerName: string;
   contactPerson: string;
   phoneNumber: string;
+  address?: string;
 }
 
 export interface LabelData extends SampleData {
   contactPerson?: string;
   phoneNumber?: string;
+  address?: string;
 }
